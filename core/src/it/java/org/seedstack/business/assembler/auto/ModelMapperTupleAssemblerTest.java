@@ -9,69 +9,51 @@
  */
 package org.seedstack.business.assembler.auto;
 
-import com.google.common.collect.Lists;
 import org.assertj.core.api.Assertions;
+import org.javatuples.Pair;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.seedstack.business.api.domain.base.BaseAggregateRoot;
 import org.seedstack.business.api.interfaces.assembler.DtoOf;
-import org.seedstack.business.core.interfaces.AutomaticAssembler;
+import org.seedstack.business.core.interfaces.ModelMapperTupleAssembler;
+import org.seedstack.business.api.Tuples;
 import org.seedstack.seed.it.SeedITRunner;
 
 import javax.inject.Inject;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
 
 /**
  * @author Pierre Thirouin <pierre.thirouin@ext.mpsa.com>
  *         24/02/2015
  */
 @RunWith(SeedITRunner.class)
-public class AutomaticAssemblerTest {
+public class ModelMapperTupleAssemblerTest {
 
     @Inject
-    private AutomaticAssembler<Order, OrderDTO> defaultAssembler;
+    private ModelMapperTupleAssembler<Pair<Order, Customer>, OrderDTO> defaultTupleAssembler;
 
     @Test
     public void testAssembleDtoFromAggregate() {
-        Order order = new Order(new Customer(new Name("John", "Doe")), new Address("main street", "bevillecity"), null, null);
+        Customer customer = new Customer(new Name("John", "Doe"));
+        Order order = new Order(new Address("main street", "bevillecity"));
 
-        OrderDTO orderDTO = defaultAssembler.assembleDtoFromAggregate(order);
-
-        Assertions.assertThat(orderDTO.customerFirstName).isEqualTo("John");
-        Assertions.assertThat(orderDTO.customerLastName).isEqualTo("Doe");
-        Assertions.assertThat(orderDTO.billingCity).isEqualTo("bevillecity");
-        Assertions.assertThat(orderDTO.billingStreet).isEqualTo("main street");
-    }
-
-    @Test
-    public void testAssembleDtoFromAggregateWithMapAndList() {
-        List<String> features = Lists.newArrayList("woow", "such meta");
-        Map<String, String> specs = new HashMap<String, String>();
-        specs.put("screen", "big but not too much");
-        specs.put("price", "cheap");
-        Order order = new Order(new Customer(new Name("John", "Doe")), new Address("main street", "bevillecity"), features, specs);
-
-        OrderDTO orderDTO = defaultAssembler.assembleDtoFromAggregate(order);
+        Pair<Order, Customer> tuple = Tuples.create(order, customer);
+        OrderDTO orderDTO = defaultTupleAssembler.assembleDtoFromAggregate(tuple);
 
         Assertions.assertThat(orderDTO.customerFirstName).isEqualTo("John");
         Assertions.assertThat(orderDTO.customerLastName).isEqualTo("Doe");
         Assertions.assertThat(orderDTO.billingCity).isEqualTo("bevillecity");
         Assertions.assertThat(orderDTO.billingStreet).isEqualTo("main street");
-
-        orderDTO = defaultAssembler.assembleDtoFromAggregate(order);
-
-        Assertions.assertThat(orderDTO.customerFirstName).isEqualTo("John");
-        Assertions.assertThat(orderDTO.customerLastName).isEqualTo("Doe");
     }
 
     @Test
     public void testUpdateDtoFromAggregate() {
-        Order order = new Order(new Customer(new Name("John", "Doe")), new Address("main street", "bevillecity"), null, null);
+        Customer customer = new Customer(new Name("John", "Doe"));
+        Order order = new Order( new Address("main street", "bevillecity"));
         OrderDTO orderDTO = new OrderDTO("Jane", "Doe", "", "");
 
-        defaultAssembler.updateDtoFromAggregate(orderDTO, order);
+
+        Pair<Order, Customer> tuple = Tuples.create(order, customer);
+        defaultTupleAssembler.updateDtoFromAggregate(orderDTO, tuple);
 
         Assertions.assertThat(orderDTO.customerFirstName).isEqualTo("John");
         Assertions.assertThat(orderDTO.customerLastName).isEqualTo("Doe");
@@ -81,52 +63,34 @@ public class AutomaticAssemblerTest {
 
     //@Test
     public void testMergeAggregateWithDto() {
-        Order order = new Order(new Customer(new Name("Jane", "Doe")), new Address(), null, null);
-        order.setIgnoredProp("this should not be deleted");
+        Customer customer = new Customer(new Name("John", "Doe"));
+        Order order = new Order(null);
         OrderDTO orderDTO = new OrderDTO("John", "Doe", "main street", "bevillecity");
 
-        // This custom assembler test a custom mapping for the merge
-        // this mapping is necessary because the name are not matching billing != billingAddress
+        Pair<Order, Customer> tuple = Tuples.create(order, customer);
+        defaultTupleAssembler.mergeAggregateWithDto(tuple, orderDTO);
 
-        defaultAssembler.mergeAggregateWithDto(order, orderDTO);
-
-        Assertions.assertThat(order.getCustomer().getName().getFirstName()).isEqualTo("John");
-        Assertions.assertThat(order.getCustomer().getName().getLastName()).isEqualTo("Doe");
-        Assertions.assertThat(order.getBillingAddress().getCity()).isEqualTo("bevillecity");
-        Assertions.assertThat(order.getBillingAddress().getStreet()).isEqualTo("main street");
-        Assertions.assertThat(order.getIgnoredProp()).isEqualTo("this should not be deleted");
+        Assertions.assertThat(orderDTO.customerFirstName).isEqualTo("John");
+        Assertions.assertThat(orderDTO.customerLastName).isEqualTo("Doe");
+        Assertions.assertThat(orderDTO.billingCity).isEqualTo("bevillecity");
+        Assertions.assertThat(orderDTO.billingStreet).isEqualTo("main street");
     }
 
     static class Order extends BaseAggregateRoot<String> {
         String id;
-        Customer customer;
-        List<String> features;
-        Map<String, String> specs;
-        String ignoredProp;
+
+        Address billingAddress;
 
         @Override
         public String getEntityId() {
             return id;
         }
 
-        Address billingAddress;
-
         public Order() {
         }
 
-        public Order(Customer customer, Address billingAddress, List<String> features, Map<String, String> specs) {
-            this.customer = customer;
+        public Order(Address billingAddress) {
             this.billingAddress = billingAddress;
-            this.features = features;
-            this.specs = specs;
-        }
-
-        public Customer getCustomer() {
-            return customer;
-        }
-
-        public void setCustomer(Customer customer) {
-            this.customer = customer;
         }
 
         public Address getBillingAddress() {
@@ -136,34 +100,17 @@ public class AutomaticAssemblerTest {
         public void setBillingAddress(Address billingAddress) {
             this.billingAddress = billingAddress;
         }
-
-        public List<String> getFeatures() {
-            return features;
-        }
-
-        public void setFeatures(List<String> features) {
-            this.features = features;
-        }
-
-        public Map<String, String> getSpecs() {
-            return specs;
-        }
-
-        public void setSpecs(Map<String, String> specs) {
-            this.specs = specs;
-        }
-
-        public String getIgnoredProp() {
-            return ignoredProp;
-        }
-
-        public void setIgnoredProp(String ignoredProp) {
-            this.ignoredProp = ignoredProp;
-        }
     }
 
-    static class Customer {
+    static class Customer extends BaseAggregateRoot<String> {
+        String id;
+
         Name name;
+
+        @Override
+        public String getEntityId() {
+            return id;
+        }
 
         public Customer() {
         }
@@ -242,14 +189,12 @@ public class AutomaticAssemblerTest {
         }
     }
 
-    @DtoOf(Order.class)
+    @DtoOf({Order.class, Customer.class})
     static class OrderDTO {
         String customerFirstName;
         String customerLastName;
         String billingStreet;
         String billingCity;
-        List<String> features;
-        Map<String, String> specs;
 
         public OrderDTO() {
         }
@@ -291,22 +236,6 @@ public class AutomaticAssemblerTest {
 
         public void setBillingCity(String billingCity) {
             this.billingCity = billingCity;
-        }
-
-        public List<String> getFeatures() {
-            return features;
-        }
-
-        public void setFeatures(List<String> features) {
-            this.features = features;
-        }
-
-        public Map<String, String> getSpecs() {
-            return specs;
-        }
-
-        public void setSpecs(Map<String, String> specs) {
-            this.specs = specs;
         }
     }
 }
